@@ -13,7 +13,7 @@ Unlike generic linters, this tool works with **Claude** to enforce architectural
   - **⚡️ High Performance:** Built on Rust-based `ripgrep` to scan thousands of files instantly.
   - **🛡️ Service Layer Validation:** Strictly enforces Pydantic `BaseModel` return types (blocks `Dict`, `Any`).
   - **🏗️ Dependency Enforcement:** Detects forbidden imports (e.g., API layer directly importing Repositories).
-  - **🔌 Extensible Design:** Comes with **FastAPI** rules by default; easily expandable to **Spring Boot** or **React**.
+  - **🔌 Extensible Design:** Comes with **FastAPI** rules by default, and an **extensible plugin system** to easily add validators for **Spring Boot**, **React**, or other frameworks.
   - **📊 Detailed Reporting:** Generates structured ASCII reports with architectural grades (A-F).
 
 ## 🛠 Prerequisites
@@ -98,9 +98,21 @@ Start a session with Claude Code:
 claude
 ```
 
+### 1. Validate Architecture
+
 **Example Prompt:**
 
-> "Scan the architecture of my project at `/home/user/projects/my-fastapi-service`."
+> "Scan the architecture of my project at `/home/user/projects/my-fastapi-service` for `FASTAPI` compliance, with verbose output."
+
+**Tool Call (internal):**
+
+```python
+validate_architecture(
+    project_path="/home/user/projects/my-fastapi-service",
+    tech_stack="FASTAPI",
+    verbose=True
+)
+```
 
 **Example Output:**
 
@@ -134,21 +146,174 @@ claude
 └─ Architecture Score: 90/100 (Grade A) - Excellent ✨
 ```
 
-## ⚙️ Customization
+### 2. Fix Violations
 
-You can add custom rules for different tech stacks (like Spring Boot or React) by modifying the `RULES` dictionary in `main.py`.
+**Example Prompt:**
+
+> "Automatically fix all auto-fixable Clean Architecture violations in my project at `/home/user/projects/my-fastapi-service`. Perform a dry run first."
+
+**Tool Call (internal):**
 
 ```python
-RULES = {
-    "FASTAPI": { ... },
-    "SPRING": {
-        "files": "**/*.java",
-        "patterns": {
-             # Add Java patterns here
+fix_violations(
+    project_path="/home/user/projects/my-fastapi-service",
+    dry_run=True
+)
+```
+
+**Example Output (Dry Run):**
+
+```text
+🔧 Auto-fix Report (DRY RUN)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📂 Project: /home/user/projects/my-fastapi-service
+
+📊 Summary:
+  - Total Violations: 1
+  - Auto-fixable: 1
+  - Manual Review Required: 0
+  - Fixes Applied: 1
+
+✅ Applied Fixes (1):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. services/user_service.py:45
+   Description: Converted Dict return type to Pydantic BaseModel.
+   Original:    def get_user(...) -> Dict[str, Any]:
+   Fixed:       def get_user(...) -> User:
+   ⚠️  Action Required: Generated new schema 'User' in schemas/user.py. Review and import.
+
+📄 Schema Files Generated (1):
+   - schemas/user.py
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 This was a DRY RUN. No files were modified.
+   Run with dry_run=False to apply changes.
+```
+
+### 3. Generate Schema
+
+**Example Prompt:**
+
+> "Generate a Pydantic schema named `Product` with fields `name` (str), `price` (float), and `in_stock` (bool). Save it to `src/my_app/schemas/product.py`."
+
+**Tool Call (internal):**
+
+```python
+generate_schema_tool(
+    class_name="Product",
+    fields={
+        "name": "str",
+        "price": "float",
+        "in_stock": "bool"
+    },
+    output_path="src/my_app/schemas/product.py"
+)
+```
+
+**Example Output:**
+
+```python
+# src/my_app/schemas/product.py
+from pydantic import BaseModel
+
+class Product(BaseModel):
+    name: str
+    price: float
+    in_stock: bool
+```
+
+## ⚙️ Customization
+
+The validator uses a plugin-based architecture. New frameworks or custom rules can be added without modifying `main.py`.
+
+### Adding New Framework Validators
+
+To add support for a new `TECH_STACK` (e.g., `DJANGO`):
+
+1.  **Create a new validator module:**
+    Create `src/django/validators/validator.py` (similar to `src/fastapi/validators/validator.py`).
+    ```python
+    # src/django/validators/validator.py
+    from typing import Dict, Any
+    from src.core.base import FrameworkValidator
+    from src.core.constants import Framework
+    from src.core.models import ValidationResult
+    from src.core.registry import validator_registry
+
+    @validator_registry.register(Framework.DJANGO) # Register with the registry
+    class DjangoValidator(FrameworkValidator):
+        # Implement default_config and validation logic here
+        @property
+        def default_config(self) -> Dict[str, Any]:
+            return {
+                "version": "1.0",
+                "paths": {
+                    "views": "src/*/views/*.py",
+                    "models": "src/*/models/*.py",
+                },
+                "exclude": ["**/tests/**", "**/__pycache__/**"],
+            }
+
+        def validate(self) -> ValidationResult:
+            # Implement your Django-specific validation logic
+            # ...
+            return self._build_validation_result(
+                violations=[],
+                framework=Framework.DJANGO.value
+            )
+    ```
+
+2.  **Import the new validator:**
+    Ensure the new validator module is imported in `main.py` to trigger its registration.
+    ```python
+    # main.py
+    # ...
+    import src.django.validators # noqa: F401 - registers DjangoValidator
+    # ...
+    ```
+
+### Defining Custom Rules
+
+Validation rules for each framework (e.g., FastAPI) are defined in a `rules.json` file located in `src/<framework>/rules/`.
+
+**Example: `src/fastapi/rules/rules.json`**
+
+```json
+{
+  "FASTAPI": {
+    "patterns": {
+      "CRITICAL": {
+        "MISSING_RETURN_TYPE": {
+          "layer": "services",
+          "regex": ["def\s+\w+\(.*\)\s*->\s*(None|Dict|Any):"],
+          "msg": "Service layer functions must have explicit Pydantic BaseModel return types.",
+          "auto_fix": true
         }
+      },
+      "WARNING": {
+        "FORBIDDEN_REPOSITORY_IMPORT": {
+          "layer": "api",
+          "regex": ["from\s+\S*\.repositories\.\S*\s+import"],
+          "msg": "API layer should not directly import from the Repository layer.",
+          "auto_fix": false
+        }
+      }
     }
+  }
 }
 ```
+
+**Rule Structure:**
+-   **`framework_name`**: (e.g., `"FASTAPI"`) Top-level key matching the `Framework` enum value (uppercase).
+-   **`patterns`**: Contains rules categorized by `severity` (e.g., `"CRITICAL"`, `"WARNING"`).
+-   **`rule_name`**: (e.g., `"MISSING_RETURN_TYPE"`) Unique name for the rule.
+    -   **`layer`**: The architectural layer this rule applies to (e.g., `"services"`, `"api"`). These map to the `paths` defined in the validator's `default_config`.
+    -   **`regex`**: A list of regular expressions. If any regex matches, the rule is violated.
+    -   **`msg`**: The message to display when the rule is violated.
+    -   **`auto_fix`**: (Optional) `true` if this violation can be automatically fixed by the tool.
+
 
 ## 📜 License
 

@@ -1,0 +1,139 @@
+{
+    "FASTAPI": {
+        "files": "**/*.py",
+        "patterns": {
+            "CRITICAL": {
+                "SERVICE_DICT_RETURN_BASIC": {
+                    "regex": [
+                        "->\\s*(typing\\.)?Dict\\[str,\\s*Any\\]",
+                        "->\\s*dict\\[str,\\s*Any\\]"
+                    ],
+                    "layer": "services",
+                    "msg": "Service returns Dict[str, Any]. Use Pydantic BaseModel instead.",
+                    "auto_fix": true
+                },
+                "SERVICE_LIST_DICT_RETURN": {
+                    "regex": [
+                        "->\\s*List\\s*\\[\\s*Dict\\[",
+                        "->\\s*list\\s*\\[\\s*dict\\["
+                    ],
+                    "layer": "services",
+                    "msg": "Service returns List[Dict]. Use List[BaseModel] instead.",
+                    "auto_fix": true
+                },
+                "SERVICE_OPTIONAL_DICT": {
+                    "regex": [
+                        "->\\s*Optional\\s*\\[\\s*Dict\\[",
+                        "->\\s*Dict\\[.*\\]\\s*\\|\\s*None"
+                    ],
+                    "layer": "services",
+                    "msg": "Service returns Optional[Dict]. Use Optional[BaseModel] instead.",
+                    "auto_fix": true
+                },
+                "SERVICE_UNION_DICT": {
+                    "regex": [
+                        "->\\s*Union\\s*\\[.*Dict\\[",
+                        "->\\s*\\w+\\s*\\|\\s*Dict\\["
+                    ],
+                    "layer": "services",
+                    "msg": "Service returns Union with Dict. Use Union[BaseModel, ...] instead.",
+                    "auto_fix": true
+                },
+                "SERVICE_NESTED_DICT": {
+                    "regex": [
+                        "->\\s*Tuple\\s*\\[.*Dict\\[",
+                        "->\\s*Result\\s*\\[.*Dict\\["
+                    ],
+                    "layer": "services",
+                    "msg": "Service returns nested Dict in generic type. Use BaseModel instead.",
+                    "auto_fix": true
+                },
+                "API_REPO_IMPORT": {
+                    "regex": [
+                        "from\\s+.*repositories.*import",
+                        "from\\s+.*repository.*import"
+                    ],
+                    "layer": "api",
+                    "msg": "API imports Repository directly. Use Service injection via Depends().",
+                    "auto_fix": true
+                },
+                "API_REPO_INSTANTIATION": {
+                    "regex": [
+                        "\\w*Repository\\s*\\("
+                    ],
+                    "layer": "api",
+                    "msg": "API instantiates Repository. Use Service injection instead.",
+                    "auto_fix": true
+                },
+                "API_REPO_METHOD_CALL": {
+                    "regex": [
+                        "repo\\s*\\.\\s*\\w+\\s*\\(",
+                        "repository\\s*\\.\\s*\\w+\\s*\\(",
+                        "\\.get_by_\\w+\\s*\\("
+                    ],
+                    "layer": "api",
+                    "msg": "API calls Repository method. Route should only call Service methods.",
+                    "auto_fix": false
+                },
+                "SERVICE_IMPORTS_API": {
+                    "regex": [
+                        "from\\s+.*\\.api\\.",
+                        "from\\s+.*\\.api\\s+import"
+                    ],
+                    "layer": "services",
+                    "msg": "Service imports from API layer. Violates dependency flow.",
+                    "auto_fix": false
+                },
+                "REPO_IMPORTS_SERVICE": {
+                    "regex": [
+                        "from\\s+.*services.*import",
+                        "from\\s+.*service.*import"
+                    ],
+                    "layer": "repositories",
+                    "msg": "Repository imports Service. Violates dependency flow.",
+                    "auto_fix": false
+                },
+                "REPO_IMPORTS_SCHEMA": {
+                    "regex": [
+                        "from\\s+.*schemas.*import.*Response",
+                        "from\\s+.*schemas.*import.*Request"
+                    ],
+                    "layer": "repositories",
+                    "msg": "Repository imports Pydantic schema. Repository should only use SQLAlchemy models.",
+                    "auto_fix": false
+                }
+            },
+            "WARNING": {
+                "SERVICE_ANY_RETURN": {
+                    "regex": [
+                        "->\\s*Any\\s*:",
+                        "->\\s*Any\\s*$"
+                    ],
+                    "layer": "services",
+                    "msg": "Service returns Any type. Specify concrete BaseModel type.",
+                    "auto_fix": false
+                },
+                "MISSING_RETURN_TYPE": {
+                    "regex": [
+                        "async\\s+def\\s+\\w+\\s*\\([^)]*\\)\\s*:",
+                        "def\\s+(?!__)\\w+\\s*\\([^)]*\\)\\s*:"
+                    ],
+                    "layer": "services",
+                    "msg": "Method missing return type annotation.",
+                    "auto_fix": false,
+                    "_comment": "DEPRECATED: Now handled by AST analyzer (MISSING_RETURN_TYPE_AST) for better accuracy with multi-line signatures and decorator awareness"
+                }
+            },
+            "INFO": {
+                "PRIVATE_METHOD_DICT": {
+                    "regex": [
+                        "def\\s+_\\w+.*->\\s*Dict\\["
+                    ],
+                    "layer": "services",
+                    "msg": "Private method returns Dict. Consider using BaseModel for consistency.",
+                    "auto_fix": false
+                }
+            }
+        }
+    }
+}
